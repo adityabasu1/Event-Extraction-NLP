@@ -26,9 +26,272 @@ def custom_print(*msg):
             print(msg[i], ' ', end='')
             logger.write(str(msg[i]))
 
-def get_model(model_id):
-    if model_id == 1:
-        return SeqToSeqModel()
+
+def load_word_embedding(embed_file, vocab):
+    custom_print('vocab length:', len(vocab))
+    embed_vocab = OrderedDict()
+    rev_embed_vocab = OrderedDict()
+    embed_matrix = list()
+
+    embed_vocab['<PAD>'] = 0
+    rev_embed_vocab[0] = '<PAD>'
+    embed_matrix.append(np.zeros(word_embed_dim, dtype=np.float32))
+
+    embed_vocab['<UNK>'] = 1
+    rev_embed_vocab[1] = '<UNK>'
+    embed_matrix.append(np.random.uniform(-0.25, 0.25, word_embed_dim))
+
+    embed_vocab['<SOS>'] = 2
+    rev_embed_vocab[2] = '<SOS>'
+    embed_matrix.append(np.random.uniform(-0.25, 0.25, word_embed_dim))
+
+    embed_vocab['<EOS>'] = 3
+    rev_embed_vocab[3] = '<EOS>'
+    embed_matrix.append(np.random.uniform(-0.25, 0.25, word_embed_dim))
+
+    word_idx = 4
+    with open(embed_file, "r") as f:
+        for line in f:
+            parts = line.split()
+            if len(parts) < word_embed_dim + 1:
+                continue
+            word = parts[0]
+            if word in vocab and vocab[word] >= word_min_freq:
+                vec = [np.float32(val) for val in parts[1:]]
+                embed_matrix.append(vec)
+                embed_vocab[word] = word_idx
+                rev_embed_vocab[word_idx] = word
+                word_idx += 1
+
+    for word in vocab:
+        if word not in embed_vocab and vocab[word] >= word_min_freq:
+            embed_matrix.append(np.random.uniform(-0.25, 0.25, word_embed_dim))
+            embed_vocab[word] = word_idx
+            rev_embed_vocab[word_idx] = word
+            word_idx += 1
+
+    custom_print('embed dictionary length:', len(embed_vocab))
+    return embed_vocab, rev_embed_vocab, np.array(embed_matrix, dtype=np.float32)
+
+
+def build_vocab(data, rels, vocab_file, embed_file):
+    vocab = OrderedDict()
+    char_v = OrderedDict()
+    char_v['<PAD>'] = 0
+    char_v['<UNK>'] = 1
+    char_v[';'] = 2
+    char_v['|'] = 3
+    char_idx = 4
+    for d in data:
+        for word in d.SrcWords:
+            if word not in vocab:
+                vocab[word] = 1
+            else:
+                vocab[word] += 1
+
+            for c in word:
+                if c not in char_v:
+                    char_v[c] = char_idx
+                    char_idx += 1
+
+    for rel in rels:
+        vocab[rel] = word_min_freq
+
+    vocab[';'] = word_min_freq
+    vocab['|'] = word_min_freq
+
+    word_v, rev_word_v, embed_matrix = load_word_embedding(embed_file, vocab)
+    output = open(vocab_file, 'wb')
+    pickle.dump([word_v, char_v], output)
+    output.close()
+    return word_v, rev_word_v, char_v, embed_matrix
+
+
+def load_vocab(vocab_file):
+    with open(vocab_file, 'rb') as f:
+        word_v, char_v = pickle.load(f)
+    return word_v, char_v
+
+def get_adj_mat(amat):
+    K = 5
+    adj_mat = np.zeros((len(amat), len(amat)), np.float32)
+    for i in range(len(amat)):
+        for j in range(len(amat)):
+            if 0 <= amat[i][j] <= K:
+                adj_mat[i][j] = 1.0 / math.pow(2, amat[i][j])
+            else:
+                adj_mat[i][j] = 0
+    return adj_mat
+
+
+
+def get_data(src_lines, trg_lines, adj_lines, datatype):
+    samples = []
+    uid = 1
+    src_len = -1
+    trg_len = -1
+    for i in range(0, len(src_lines)):
+        src_line = src_lines[i].strip()
+        trg_line = trg_lines[i].strip()
+        src_words = src_line.split()
+
+        if datatype == 1:
+            tuples = trg_line.strip().split('|')
+            random.shuffle(tuples)
+            new_trg_line = ' | '.join(tuples)
+            assert len(trg_line.split()) == len(new_trg_line.split())
+            trg_line = new_trg_line
+
+        trg_words = list()
+        trg_words.append('<SOS>')
+        trg_words += trg_line.split()
+        trg_words.append('<EOS>')
+
+        adj_data = json.loads(adj_lines[i])
+        adj_mat = get_adj_mat(adj_data['adj_mat'])
+
+        if datatype == 1 and (len(src_words) > max_src_len or len(trg_words) > max_trg_len + 1):
+            continue
+        if len(src_words) > src_len:
+            src_len = len(src_words)
+        if len(trg_words) > trg_len:
+            trg_len = len(trg_words)
+        sample = Sample(Id=uid, SrcLen=len(src_words), SrcWords=src_words, TrgLen=len(trg_words),
+                        TrgWords=trg_words, AdjMat=adj_mat)
+        samples.append(sample)
+        uid += 1
+    print(src_len)
+    print(trg_len)
+    return samples
+
+
+def read_data(src_file, trg_file, adj_file, datatype):
+    reader = open(src_file)
+    src_lines = reader.readlines()
+    reader.close()
+
+    reader = open(trg_file)
+    trg_lines = reader.readlines()
+    reader.close()
+
+    reader = open(adj_file)
+    adj_lines = reader.readlines()
+    reader.close()
+
+    # tot_len = 100
+    # src_lines = src_lines[0:min(tot_len, len(src_lines))]
+    # trg_lines = trg_lines[0:min(tot_len, len(trg_lines))]
+    # adj_lines = adj_lines[0:min(tot_len, len(adj_lines))]
+
+    data = get_data(src_lines, trg_lines, adj_lines, datatype)
+    return data
+
+
+def is_full_match(triplet, triplets):
+    for t in triplets:
+        if t[0] == triplet[0] and t[1] == triplet[1] and t[2] == triplet[2]:
+            return True
+    return False
+
+
+def is_head_match(triplet, triplets, cur_mode):
+    if cur_mode == 1:
+        return is_full_match(triplet, triplets)
+    for t in triplets:
+        if t[0].split()[-1] == triplet[0].split()[-1] \
+                and t[1].split()[-1] == triplet[1].split()[-1] \
+                and t[2].split()[-1] == triplet[2].split()[-1]:
+            return True
+    return False
+
+
+
+
+def cal_f1(ref_lines, pred_lines, rel_lines, cur_mode):
+    rels = []
+    for line in rel_lines:
+        rels.append(line.strip())
+    gt_pos = 0
+    pred_pos = 0
+    correct = 0
+    total_pred_triple = 0
+    total_gt_triple = 0
+    none_cnt = 0
+    same_cnt = 0
+    dup = 0
+    for i in range(0, min(len(ref_lines), len(pred_lines))):
+        ref_line = ref_lines[i].strip()
+        ref_triplets = []
+        if ref_line != 'NIL':
+            for t in ref_line.split('|'):
+                parts = t.split(';')
+                triplet = (parts[0].strip(), parts[1].strip(), parts[2].strip())
+                total_gt_triple += 1
+                if not is_full_match(triplet, ref_triplets):
+                    ref_triplets.append(triplet)
+            gt_pos += len(ref_triplets)
+
+        pred_line = pred_lines[i].strip()
+        if pred_line == 'NIL' or pred_line == '':
+            continue
+        pred_triplets = []
+        for t in pred_line.split('|'):
+            parts = t.split(';')
+            if len(parts) != 3:
+                continue
+            em1 = parts[0].strip()
+            em2 = parts[1].strip()
+            rel = parts[2].strip()
+
+            if len(em1) == 0 or len(em2) == 0 or len(rel) == 0:
+                continue
+
+            if em1 == em2:
+                same_cnt += 1
+                continue
+
+            if rel not in rels:
+                continue
+
+            if rel == 'None' or em1 == 'None' or em2 == 'None':
+                none_cnt += 1
+                continue
+
+            triplet = (em1, em2, rel)
+            total_pred_triple += 1
+            if not is_full_match(triplet, pred_triplets):
+                pred_triplets.append(triplet)
+            else:
+                dup += 1
+
+        pred_pos += len(pred_triplets)
+        for gt_triplet in ref_triplets:
+            if is_head_match(gt_triplet, pred_triplets, cur_mode):
+                correct += 1
+
+    # print(pred_pos, '\t', gt_pos, '\t', correct, '\t', total_pred_triple, '\t', total_gt_triple, '\t', none_cnt)
+    p = float(correct / (pred_pos + 1e-08))
+    r = float(correct / (gt_pos + 1e-08))
+    f1 = 2 * p * r / (p + r + 1e-08)
+    p = round(p, 3)
+    r = round(r, 3)
+    f1 = round(f1, 3)
+    # res = [p, r, f1]
+    # print(res)
+    # print(r)
+    # print(f1)
+    # print(same_cnt)
+    # print(dup)
+    return p, r, f1
+
+
+def write_test_res(data, preds, attns, outfile):
+    writer = open(outfile, 'w')
+    for i in range(0, len(data)):
+        pred_words = get_pred_words(preds[i], attns[i], data[i].SrcWords)[:-1]
+        writer.write(' '.join(pred_words) + '\n')
+    writer.close()
+
 
 def set_random_seeds(seed):
     random.seed(seed)
@@ -36,6 +299,203 @@ def set_random_seeds(seed):
     torch.manual_seed(seed)
     if n_gpu > 1:
         torch.cuda.manual_seed_all(seed)
+
+def get_max_len(sample_batch):
+    src_max_len = len(sample_batch[0].SrcWords)
+    for idx in range(1, len(sample_batch)):
+        if len(sample_batch[idx].SrcWords) > src_max_len:
+            src_max_len = len(sample_batch[idx].SrcWords)
+
+    trg_max_len = len(sample_batch[0].TrgWords)
+    for idx in range(1, len(sample_batch)):
+        if len(sample_batch[idx].TrgWords) > trg_max_len:
+            trg_max_len = len(sample_batch[idx].TrgWords)
+
+    return src_max_len, trg_max_len
+
+def get_words_index_seq(words, max_len):
+    seq = list()
+    for word in words:
+        if word in word_vocab:
+            seq.append(word_vocab[word])
+        else:
+            seq.append(word_vocab['<UNK>'])
+    pad_len = max_len - len(words)
+    for i in range(0, pad_len):
+        seq.append(word_vocab['<PAD>'])
+    return seq
+
+
+def get_target_words_index_seq(words, max_len):
+    seq = list()
+    for word in words:
+        if word in word_vocab:
+            seq.append(word_vocab[word])
+        else:
+            seq.append(word_vocab['<UNK>'])
+    pad_len = max_len - len(words)
+    for i in range(0, pad_len):
+        seq.append(word_vocab['<EOS>'])
+    return seq
+
+
+def get_padded_mask(cur_len, max_len):
+    mask_seq = list()
+    for i in range(0, cur_len):
+        mask_seq.append(0)
+    pad_len = max_len - cur_len
+    for i in range(0, pad_len):
+        mask_seq.append(1)
+    return mask_seq
+
+
+def get_target_vocab_mask(src_words):
+    mask = []
+    for i in range(0, len(word_vocab)):
+        mask.append(1)
+    for word in src_words:
+        if word in word_vocab:
+            mask[word_vocab[word]] = 0
+    for rel in relations:
+        mask[word_vocab[rel]] = 0
+
+    mask[word_vocab['<UNK>']] = 0
+    mask[word_vocab['<EOS>']] = 0
+    mask[word_vocab[';']] = 0
+    mask[word_vocab['|']] = 0
+    return mask
+
+
+def get_rel_mask(trg_words, max_len):
+    mask_seq = list()
+    for word in trg_words:
+        mask_seq.append(0)
+        # if word in relations:
+        #     mask_seq.append(0)
+        # else:
+        #     mask_seq.append(1)
+    pad_len = max_len - len(trg_words)
+    for i in range(0, pad_len):
+        mask_seq.append(1)
+    return mask_seq
+
+
+def get_char_seq(words, max_len):
+    char_seq = list()
+    for i in range(0, conv_filter_size - 1):
+        char_seq.append(char_vocab['<PAD>'])
+    for word in words:
+        for c in word[0:min(len(word), max_word_len)]:
+            if c in char_vocab:
+                char_seq.append(char_vocab[c])
+            else:
+                char_seq.append(char_vocab['<UNK>'])
+        pad_len = max_word_len - len(word)
+        for i in range(0, pad_len):
+            char_seq.append(char_vocab['<PAD>'])
+        for i in range(0, conv_filter_size - 1):
+            char_seq.append(char_vocab['<PAD>'])
+
+    pad_len = max_len - len(words)
+    for i in range(0, pad_len):
+        for i in range(0, max_word_len + conv_filter_size - 1):
+            char_seq.append(char_vocab['<PAD>'])
+    return char_seq
+
+
+
+def get_relations(file_name):
+    rels = []
+    reader = open(file_name)
+    lines = reader.readlines()
+    reader.close()
+    for line in lines:
+        rels.append(line.strip())
+    return rels
+
+def get_batch_data(cur_samples, is_training=False):
+    """
+    Returns the training samples and labels as numpy array
+    """
+    batch_src_max_len, batch_trg_max_len = get_max_len(cur_samples)
+    src_words_list = list()
+    src_words_mask_list = list()
+    src_char_seq = list()
+
+    trg_words_list = list()
+    trg_vocab_mask = list()
+    adj_lst = []
+
+    target = list()
+    cnt = 0
+    for sample in cur_samples:
+        src_words_list.append(get_words_index_seq(sample.SrcWords, batch_src_max_len))
+        src_words_mask_list.append(get_padded_mask(sample.SrcLen, batch_src_max_len))
+        src_char_seq.append(get_char_seq(sample.SrcWords, batch_src_max_len))
+        trg_vocab_mask.append(get_target_vocab_mask(sample.SrcWords))
+
+        cur_masked_adj = np.zeros((batch_src_max_len, batch_src_max_len), dtype=np.float32)
+        cur_masked_adj[:len(sample.SrcWords), :len(sample.SrcWords)] = sample.AdjMat
+        adj_lst.append(cur_masked_adj)
+
+        if is_training:
+            padded_trg_words = get_words_index_seq(sample.TrgWords, batch_trg_max_len)
+            trg_words_list.append(padded_trg_words)
+            target.append(padded_trg_words[1:])
+        else:
+            trg_words_list.append(get_words_index_seq(['<SOS>'], 1))
+        cnt += 1
+
+    return {'src_words': np.array(src_words_list, dtype=np.float32),
+            'src_chars': np.array(src_char_seq),
+            'src_words_mask': np.array(src_words_mask_list),
+            'adj': np.array(adj_lst),
+            'trg_vocab_mask': np.array(trg_vocab_mask),
+            'trg_words': np.array(trg_words_list, dtype=np.int32),
+            'target': np.array(target)}
+
+def shuffle_data(data):
+    custom_print(len(data))
+    data.sort(key=lambda x: x.SrcLen)
+    num_batch = int(len(data) / batch_size)
+    rand_idx = random.sample(range(num_batch), num_batch)
+    new_data = []
+    for idx in rand_idx:
+        new_data += data[batch_size * idx: batch_size * (idx + 1)]
+    if len(new_data) < len(data):
+        new_data += data[num_batch * batch_size:]
+    return new_data
+
+
+def get_pred_words(preds, attns, src_words):
+    pred_words = []
+    for i in range(0, max_trg_len):
+        word_idx = preds[i]
+        if word_vocab['<EOS>'] == word_idx:
+            pred_words.append('<EOS>')
+            break
+        elif att_type != 'None' and copy_on and word_vocab['<UNK>'] == word_idx:
+            word_idx = attns[i]
+            pred_words.append(src_words[word_idx])
+        else:
+            pred_words.append(rev_word_vocab[word_idx])
+    return pred_words
+
+
+def get_F1(data, preds, attns):
+    gt_pos = 0
+    pred_pos = 0
+    correct_pos = 0
+    for i in range(0, len(data)):
+        gt_words = data[i].TrgWords[1:]
+        pred_words = get_pred_words(preds[i], attns[i], data[i].SrcWords)
+        gt_pos += len(gt_words)
+        pred_pos += len(pred_words)
+        for j in range(0, min(len(gt_words), len(pred_words))):
+            if gt_words[j] == pred_words[j]:
+                correct_pos += 1
+    return pred_pos, gt_pos, correct_pos
+
 
 # BERT?
 class WordEmbeddings(nn.Module):
