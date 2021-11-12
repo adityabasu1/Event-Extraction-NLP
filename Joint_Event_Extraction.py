@@ -284,6 +284,9 @@ def cal_f1(ref_lines, pred_lines, rel_lines, cur_mode):
     # print(dup)
     return p, r, f1
 
+def get_model(model_id):
+    if model_id == 1:
+        return SeqToSeqModel()
 
 def write_test_res(data, preds, attns, outfile):
     writer = open(outfile, 'w')
