@@ -74,7 +74,7 @@ def load_word_embedding(embed_file, vocab):
     return embed_vocab, rev_embed_vocab, np.array(embed_matrix, dtype=np.float32)
 
 
-def build_vocab(data, rels, vocab_file, embed_file):
+def build_vocab(data, events, arguments, roles, vocab_file, embed_file):
     vocab = OrderedDict()
     char_v = OrderedDict()
     char_v['<PAD>'] = 0
@@ -94,8 +94,12 @@ def build_vocab(data, rels, vocab_file, embed_file):
                     char_v[c] = char_idx
                     char_idx += 1
 
-    for rel in rels:
-        vocab[rel] = word_min_freq
+    for event in events:
+        vocab[event] = word_min_freq
+    for argument in arguments:
+        vocab[argument] = word_min_freq
+    for role in roles:
+        vocab[role] = word_min_freq
 
     vocab[';'] = word_min_freq
     vocab['|'] = word_min_freq
@@ -125,7 +129,7 @@ def get_adj_mat(amat):
 
 
 
-def get_data(src_lines, trg_lines, adj_lines, datatype):
+def get_data(src_lines, trg_lines, datatype):
     samples = []
     uid = 1
     src_len = -1
@@ -147,25 +151,24 @@ def get_data(src_lines, trg_lines, adj_lines, datatype):
         trg_words += trg_line.split()
         trg_words.append('<EOS>')
 
-        adj_data = json.loads(adj_lines[i])
-        adj_mat = get_adj_mat(adj_data['adj_mat'])
-
         if datatype == 1 and (len(src_words) > max_src_len or len(trg_words) > max_trg_len + 1):
             continue
         if len(src_words) > src_len:
             src_len = len(src_words)
         if len(trg_words) > trg_len:
             trg_len = len(trg_words)
+        
         sample = Sample(Id=uid, SrcLen=len(src_words), SrcWords=src_words, TrgLen=len(trg_words),
-                        TrgWords=trg_words, AdjMat=adj_mat)
+                        TrgWords=trg_words) #c
         samples.append(sample)
+        
         uid += 1
     print(src_len)
     print(trg_len)
     return samples
 
 
-def read_data(src_file, trg_file, adj_file, datatype):
+def read_data(src_file, trg_file, datatype):
     reader = open(src_file)
     src_lines = reader.readlines()
     reader.close()
@@ -174,16 +177,12 @@ def read_data(src_file, trg_file, adj_file, datatype):
     trg_lines = reader.readlines()
     reader.close()
 
-    reader = open(adj_file)
-    adj_lines = reader.readlines()
-    reader.close()
-
     # tot_len = 100
     # src_lines = src_lines[0:min(tot_len, len(src_lines))]
     # trg_lines = trg_lines[0:min(tot_len, len(trg_lines))]
     # adj_lines = adj_lines[0:min(tot_len, len(adj_lines))]
 
-    data = get_data(src_lines, trg_lines, adj_lines, datatype)
+    data = get_data(src_lines, trg_lines, datatype)
     return data
 
 
@@ -207,10 +206,18 @@ def is_head_match(triplet, triplets, cur_mode):
 
 
 
-def cal_f1(ref_lines, pred_lines, rel_lines, cur_mode):
+def cal_f1(ref_lines, pred_lines, event_lines, argument_lines, roles_lines, cur_mode):
     rels = []
-    for line in rel_lines:
-        rels.append(line.strip())
+    events = []
+    arguments = []
+    roles = []
+    for event in event_lines:
+        events.append(event.strip())
+    for argument in argument_lines:
+        arguments.append(argument.strip())
+    for role in roles_lines:
+        roles.append(role.strip())
+    
     gt_pos = 0
     pred_pos = 0
     correct = 0
@@ -359,8 +366,13 @@ def get_target_vocab_mask(src_words):
     for word in src_words:
         if word in word_vocab:
             mask[word_vocab[word]] = 0
-    for rel in relations:
-        mask[word_vocab[rel]] = 0
+    # events, arguments, roles
+    for event in events:
+        mask[word_vocab[event]] = 0
+    for argument in arguments:
+        mask[word_vocab[argument]] = 0
+    for role in roles:
+        mask[word_vocab[role]] = 0
 
     mask[word_vocab['<UNK>']] = 0
     mask[word_vocab['<EOS>']] = 0
@@ -971,9 +983,16 @@ if __name__ == "__main__":
     layers = 1
     early_stop_cnt = 5
     sample_cnt = 0
-    Sample = recordclass("Sample", "Id SrcLen SrcWords TrgLen TrgWords AdjMat")
-    rel_file = os.path.join(src_data_folder, 'relations.txt')
-    relations = get_relations(rel_file)
+    Sample = recordclass("Sample", "Id SrcLen SrcWords TrgLen TrgWords")
+
+    events_file = os.path.join(src_data_folder, 'event_types.txt')
+    arguments_file = os.path.join(src_data_folder, 'arguments.txt')
+    roles_file = os.path.join(src_data_folder, 'roles.txt')
+
+    events = get_relations(events_file)
+    arguments = get_relations(arguments_file)
+    roles = get_relations(roles_file)
+
 
     # train a model
     if job_mode == 'train':
@@ -983,21 +1002,19 @@ if __name__ == "__main__":
         custom_print('loading data......')
         model_file_name = os.path.join(trg_data_folder, 'model.h5py')
         src_train_file = os.path.join(src_data_folder, 'train.sent')
-        adj_train_file = os.path.join(src_data_folder, 'train.dep')
         trg_train_file = os.path.join(src_data_folder, 'train.tup')
-        train_data = read_data(src_train_file, trg_train_file, adj_train_file, 1)
+        train_data = read_data(src_train_file, trg_train_file, 1)
 
         src_dev_file = os.path.join(src_data_folder, 'dev.sent')
-        adj_dev_file = os.path.join(src_data_folder, 'dev.dep')
         trg_dev_file = os.path.join(src_data_folder, 'dev.tup')
-        dev_data = read_data(src_dev_file, trg_dev_file, adj_dev_file, 2)
+        dev_data = read_data(src_dev_file, trg_dev_file, 2)
 
         custom_print('Training data size:', len(train_data))
         custom_print('Development data size:', len(dev_data))
 
         custom_print("preparing vocabulary......")
         save_vocab = os.path.join(trg_data_folder, 'vocab.pkl')
-        word_vocab, rev_word_vocab, char_vocab, word_embed_matrix = build_vocab(train_data, relations, save_vocab,
+        word_vocab, rev_word_vocab, char_vocab, word_embed_matrix = build_vocab(train_data, events, arguments, roles, save_vocab,
                                                                                 embedding_file)
 
         custom_print("Training started......")
@@ -1020,9 +1037,9 @@ if __name__ == "__main__":
         custom_print('vocab size:', len(word_vocab))
 
         src_test_file = os.path.join(src_data_folder, 'test.sent')
-        adj_test_file = os.path.join(src_data_folder, 'test.dep')
         trg_test_file = os.path.join(src_data_folder, 'test.tup')
-        test_data = read_data(src_test_file, trg_test_file, adj_test_file, 3)
+        test_data = read_data(src_test_file, trg_test_file, 3)
+
         custom_print('Test data size:', len(test_data))
 
         custom_print('seed:', random_seed)
@@ -1045,10 +1062,13 @@ if __name__ == "__main__":
 
         ref_lines = open(trg_test_file).readlines()
         pred_lines = open(os.path.join(trg_data_folder, 'test.out')).readlines()
-        rel_lines = open(rel_file).readlines()
+        event_lines = open(events_file).readlines()
+        argument_lines = open(arguments).readlines()
+        roles_lines = open(roles_file).readlines()
+
         mode = 1
         custom_print('Overall F1')
-        custom_print(cal_f1(ref_lines, pred_lines, rel_lines, mode))
+        custom_print(cal_f1(ref_lines, pred_lines, event_lines, argument_lines, roles_lines, mode))
 
         copy_on = False
         custom_print('Copy Off')
@@ -1058,10 +1078,12 @@ if __name__ == "__main__":
 
         ref_lines = open(trg_test_file).readlines()
         pred_lines = open(os.path.join(trg_data_folder, 'test_without_copy.out')).readlines()
-        rel_lines = open(rel_file).readlines()
+        event_lines = open(events_file).readlines()
+        argument_lines = open(arguments).readlines()
+        roles_lines = open(roles_file).readlines()
         mode = 1
         custom_print('Overall F1')
-        custom_print(cal_f1(ref_lines, pred_lines, rel_lines, mode))
+        custom_print(cal_f1(ref_lines, pred_lines, event_lines, argument_lines, roles_lines, mode))
 
         logger.close()
 
