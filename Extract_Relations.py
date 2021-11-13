@@ -4,7 +4,7 @@ Event_types = set()
 Arguments = set()
 Roles = set()
 
-with open("Tuples.txt", 'r') as f:
+with open("all_tuples.txt", 'r') as f:
     file = f.readlines()
 
     for line in file:
@@ -15,6 +15,17 @@ with open("Tuples.txt", 'r') as f:
             Arguments.add(phrases[3].strip())
             Roles.add(phrases[4].strip())
 
-print(Event_types)
-print(Arguments)
-print(Roles)
+with open("event_types.txt", 'w') as f:
+    for L in Event_types:
+        f.write(L)
+        f.write("\n")
+
+with open("arguments.txt", 'w') as f:
+    for L in Arguments:
+        f.write(L)
+        f.write("\n")
+
+with open("roles.txt", 'w') as f:
+    for L in Roles:
+        f.write(L)
+        f.write("\n")
