@@ -204,8 +204,6 @@ def is_head_match(triplet, triplets, cur_mode):
     return False
 
 
-
-
 def cal_f1(ref_lines, pred_lines, event_lines, argument_lines, roles_lines, cur_mode):
     rels = []
     events = []
@@ -449,9 +447,9 @@ def get_batch_data(cur_samples, is_training=False):
         src_char_seq.append(get_char_seq(sample.SrcWords, batch_src_max_len))
         trg_vocab_mask.append(get_target_vocab_mask(sample.SrcWords))
 
-        cur_masked_adj = np.zeros((batch_src_max_len, batch_src_max_len), dtype=np.float32)
-        cur_masked_adj[:len(sample.SrcWords), :len(sample.SrcWords)] = sample.AdjMat
-        adj_lst.append(cur_masked_adj)
+        # cur_masked_adj = np.zeros((batch_src_max_len, batch_src_max_len), dtype=np.float32)
+        # cur_masked_adj[:len(sample.SrcWords), :len(sample.SrcWords)] = sample.AdjMat
+        # adj_lst.append(cur_masked_adj)
 
         if is_training:
             padded_trg_words = get_words_index_seq(sample.TrgWords, batch_trg_max_len)
@@ -1060,11 +1058,17 @@ if __name__ == "__main__":
         custom_print('Copy On')
         write_test_res(test_data, test_preds, test_attns, os.path.join(trg_data_folder, 'test.out'))
 
-        ref_lines = open(trg_test_file).readlines()
-        pred_lines = open(os.path.join(trg_data_folder, 'test.out')).readlines()
-        event_lines = open(events_file).readlines()
-        argument_lines = open(arguments).readlines()
-        roles_lines = open(roles_file).readlines()
+        # ref_lines = open(trg_test_file).readlines()
+        # pred_lines = open(os.path.join(trg_data_folder, 'test.out')).readlines()
+        # event_lines = open(events_file).readlines()
+        # argument_lines = open(arguments_file).readlines()
+        # roles_lines = open(roles_file).readlines()
+
+        ref_lines = open(trg_test_file).read().splitlines()
+        pred_lines = open(os.path.join(trg_data_folder, 'test_without_copy.out')).read().splitlines()
+        event_lines = open(events_file).read().splitlines()
+        argument_lines = open(arguments_file).read().splitlines()
+        roles_lines = open(roles_file).read().splitlines()
 
         mode = 1
         custom_print('Overall F1')
@@ -1076,11 +1080,18 @@ if __name__ == "__main__":
         test_preds, test_attns = predict(test_data, best_model, model_name)
         write_test_res(test_data, test_preds, test_attns, os.path.join(trg_data_folder, 'test_without_copy.out'))
 
-        ref_lines = open(trg_test_file).readlines()
-        pred_lines = open(os.path.join(trg_data_folder, 'test_without_copy.out')).readlines()
-        event_lines = open(events_file).readlines()
-        argument_lines = open(arguments).readlines()
-        roles_lines = open(roles_file).readlines()
+        # ref_lines = open(trg_test_file).readlines()
+        # pred_lines = open(os.path.join(trg_data_folder, 'test_without_copy.out')).readlines()
+        # event_lines = open(events_file).readlines()
+        # argument_lines = open(arguments_file).readlines()
+        # roles_lines = open(roles_file).readlines()
+
+        ref_lines = open(trg_test_file).read().splitlines()
+        pred_lines = open(os.path.join(trg_data_folder, 'test_without_copy.out')).read().splitlines()
+        event_lines = open(events_file).read().splitlines()
+        argument_lines = open(arguments_file).read().splitlines()
+        roles_lines = open(roles_file).read().splitlines()
+
         mode = 1
         custom_print('Overall F1')
         custom_print(cal_f1(ref_lines, pred_lines, event_lines, argument_lines, roles_lines, mode))
