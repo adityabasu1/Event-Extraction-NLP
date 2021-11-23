@@ -87,7 +87,7 @@ def calculate_f1(ref_lines, pred_lines, event_lines, argument_lines, roles_lines
             pred_strings = pred_tuple.split(';')
 
             # in the case of no argument detection, we only calculate the event trigger scores
-            if(pred_strings[2].strip()) == 'None':
+            if(pred_strings[2].strip().lower()) == 'none':
                 max_matches = 0
                 part_matches = []
 
@@ -143,15 +143,39 @@ def calculate_f1(ref_lines, pred_lines, event_lines, argument_lines, roles_lines
             pass
         
         for ref_tuple in ref_tuples:
-            if(ref_tuple.split(';')[2].strip()) != 'None':
+            if(ref_tuple.split(';')[2].strip().lower()) != 'none':
                 metric_counts['ground_truth_tuples'] += 1
                 ground_truths += 1
 
         pass
     
     print(metric_counts)
-    # 
-    #
+
+    precision = float(metric_counts['correct_predictions'] / (metric_counts['predicted_tuples']    + 1e-08))
+    recall    = float(metric_counts['correct_predictions'] / (metric_counts['ground_truth_tuples'] + 1e-08))
+    f1 = 2 * precision * recall / (precision + recall + 1e-08)
+    precision = round(precision, 3)
+    recall = round(recall, 3)
+    f1 = round(f1, 3)
+
+    print("Partwise Results")
+    
+    event_acc = metric_counts['correct_events']/  (metric_counts['events_count'] + 1e-08)
+    evtype_acc = metric_counts['correct_event_type']/  (metric_counts['events_count'] + 1e-08)
+    argument_acc = metric_counts['correct_arguments']/  (metric_counts['predicted_tuples'] + 1e-08)
+    argtype_acc = metric_counts['correct_argment_types']/  (metric_counts['predicted_tuples'] + 1e-08)
+    role_acc = metric_counts['correct_argument_roles']/ (metric_counts['predicted_tuples'] + 1e-08)
+
+
+    print(f'Event Trigger Word Accuracy: {event_acc}')
+    print(f'Event Type Accuracy: {evtype_acc}')
+    print(f'Argument Identification Accuracy: {argument_acc}')
+    print(f'Argument Type Accuracy: {argtype_acc}')
+    print(f'Argument Role Accuracy: {role_acc}')
+
+    print(f'Macro f-score: {f1}')
+
+    return f1
 
 def cal_f1_for_pair(ref_tuple: str ,
                     pred_tuple: str,
