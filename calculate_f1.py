@@ -164,6 +164,8 @@ def cal_f1_for_pair(ref_tuple: str ,
     ev1 = int( check_event_trigger(ref_strings[0].strip(), pred_strings[0].strip()) )
     ev2 = int( check_event_type(ref_strings[1].strip(), pred_strings[1].strip(), event_lines) )
 
+    return ev1, ev2
+
 def cal_f1_for_tuple(ref_tuple: str ,
                      pred_tuple: str,
                      event_lines: list,
