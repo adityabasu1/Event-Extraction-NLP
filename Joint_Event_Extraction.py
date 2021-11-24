@@ -186,108 +186,256 @@ def read_data(src_file, trg_file, datatype):
     return data
 
 
-def is_full_match(triplet, triplets):
-    for t in triplets:
-        if t[0] == triplet[0] and t[1] == triplet[1] and t[2] == triplet[2]:
-            return True
-    return False
+#event_lines, argument_lines, roles_lines
+
+# to add option for less detailed checks
+
+def check_event_trigger(ref_string, pred_string):
+    return (ref_string == pred_string)
+    pass
+
+def check_event_type(ref_string, pred_string, event_lines):
+    if granular_mode == 0:
+      if pred_string in event_lines:
+          return (ref_string == pred_string)
+      else:
+        #   print("invalid prediction")
+          return False
+      pass
+
+    if granular_mode == 1:
+      pred_token = pred_string.split(":")[0]
+      ref_token = ref_string.split(":")[0]
+      return (pred_token == ref_token)
+      pass
 
 
-def is_head_match(triplet, triplets, cur_mode):
-    if cur_mode == 1:
-        return is_full_match(triplet, triplets)
-    for t in triplets:
-        if t[0].split()[-1] == triplet[0].split()[-1] \
-                and t[1].split()[-1] == triplet[1].split()[-1] \
-                and t[2].split()[-1] == triplet[2].split()[-1]:
-            return True
-    return False
+def check_event_argument(ref_string, pred_string):
+    return (ref_string == pred_string)
+    pass
 
+def check_argument_type(ref_string, pred_string, argument_lines):
+    if granular_mode == 0:
+      if pred_string in argument_lines:
+          return (ref_string == pred_string)
+      else:
+        #   print("invalid prediction")
+          return False
+      pass
 
-def cal_f1(ref_lines, pred_lines, event_lines, argument_lines, roles_lines, cur_mode):
-    rels = []
-    events = []
-    arguments = []
-    roles = []
-    for event in event_lines:
-        events.append(event.strip())
-    for argument in argument_lines:
-        arguments.append(argument.strip())
-    for role in roles_lines:
-        roles.append(role.strip())
+    if granular_mode == 1:
+      pred_token = pred_string.split(":")[0]
+      ref_token = ref_string.split(":")[0]
+      return (pred_token == ref_token)
+      pass
+
+def check_argument_role(ref_string, pred_string, roles_lines):
+    if pred_string in roles_lines:
+        return (ref_string == pred_string)
+    else:
+        # print("invalid prediction")
+        return False
+    pass
+
+def calculate_f1(ref_lines, pred_lines, event_lines, argument_lines, roles_lines):
+
+    list_of_tracking_metrics = ['predicted_tuples',
+                                'ground_truth_tuples',
+                                'correct_predictions',
+                                'events_count',
+                                'correct_events',
+                                'correct_event_type',
+                                'correct_arguments',
+                                'correct_argment_types',
+                                'correct_argument_roles'
+                                ]
+
+    metric_counts = dict.fromkeys(list_of_tracking_metrics, 0)
     
-    gt_pos = 0
-    pred_pos = 0
-    correct = 0
-    total_pred_triple = 0
-    total_gt_triple = 0
-    none_cnt = 0
-    same_cnt = 0
-    dup = 0
+
     for i in range(0, min(len(ref_lines), len(pred_lines))):
+        
         ref_line = ref_lines[i].strip()
-        ref_triplets = []
-        if ref_line != 'NIL':
-            for t in ref_line.split('|'):
-                parts = t.split(';')
-                triplet = (parts[0].strip(), parts[1].strip(), parts[2].strip())
-                total_gt_triple += 1
-                if not is_full_match(triplet, ref_triplets):
-                    ref_triplets.append(triplet)
-            gt_pos += len(ref_triplets)
-
         pred_line = pred_lines[i].strip()
-        if pred_line == 'NIL' or pred_line == '':
-            continue
-        pred_triplets = []
-        for t in pred_line.split('|'):
-            parts = t.split(';')
-            if len(parts) != 3:
+
+        ref_tuples = ref_line.split('|')
+        pred_tuples = pred_line.split('|')
+
+        # find a way to compare multiple tuples
+
+        # correct - t1 | t2 | t3
+        # pred    - p1 | p2
+        # postives = 3 [number of ground truths minus nones]
+        # predicted_pos = 2 [number of preds minus nones]
+        # TP = correct preds 
+        # TP + FP = predicted
+        # TP + FN = positives 
+        # Precision = correct / predicted_pos 
+        # Recall = correct / positives
+        # f = pr/p+r
+
+        # handling repeated predictions 
+        # set_of_preds = set()
+        # for pred_tuple in pred_tuples:
+        #     set_of_preds.add(pred_tuple.strip())
+        # pred_tuples = list(set_of_preds)
+
+        for pred_tuple in pred_tuples:
+            pred_strings = pred_tuple.split(';')
+            if(len(pred_strings) < 3):
+              continue
+
+
+            # in the case of no argument detection, we only calculate the event trigger scores
+            if(pred_strings[2].strip().lower()) == 'none':
+                max_matches = 0
+                part_matches = []
+
+                for ref_tuple in ref_tuples:
+                    # ssss
+                    ev1, ev2 = cal_f1_for_pair(ref_tuple, pred_tuple, event_lines)
+
+                    pair_score = ev1+ev2
+
+                    if pair_score > max_matches:
+                        max_matches = pair_score
+                        part_matches = (ev1, ev2)
+                        pass
+                    pass
+
+                metric_counts['events_count'] += 1
+                if ev1 == 1:
+                    metric_counts['correct_events'] += 1
+                if ev2 == 1:
+                    metric_counts['correct_event_type'] += 1
+
                 continue
-            em1 = parts[0].strip()
-            em2 = parts[1].strip()
-            rel = parts[2].strip()
+            
+            max_matches = 0
+            part_matches = cal_f1_for_tuple(ref_tuples[0], pred_tuple, event_lines, argument_lines, roles_lines)
 
-            if len(em1) == 0 or len(em2) == 0 or len(rel) == 0:
-                continue
+            for ref_tuple in ref_tuples:
+                res = cal_f1_for_tuple(ref_tuple, pred_tuple, event_lines, argument_lines, roles_lines)
 
-            if em1 == em2:
-                same_cnt += 1
-                continue
+                tuple_score = sum(res)
 
-            if rel not in rels:
-                continue
+                if tuple_score >= max_matches:
+                    max_matches = tuple_score
+                    part_matches = res
+                    pass
+                pass
 
-            if rel == 'None' or em1 == 'None' or em2 == 'None':
-                none_cnt += 1
-                continue
+            metric_counts['predicted_tuples'] += 1
+            metric_counts['events_count'] += 1
 
-            triplet = (em1, em2, rel)
-            total_pred_triple += 1
-            if not is_full_match(triplet, pred_triplets):
-                pred_triplets.append(triplet)
-            else:
-                dup += 1
+            if max_matches >= 4:
+                metric_counts['correct_predictions'] += 1
+            if part_matches[0] == 1:
+                metric_counts['correct_events'] += 1
+            if part_matches[1] == 1:
+                metric_counts['correct_event_type'] += 1
+            if part_matches[2] == 1:
+                metric_counts['correct_arguments'] += 1
+            if part_matches[3] == 1:
+                metric_counts['correct_argment_types'] += 1
+            if part_matches[4] == 1:
+                metric_counts['correct_argument_roles'] += 1
+            pass
+        
+        for ref_tuple in ref_tuples:
+            if(ref_tuple.split(';')[2].strip().lower()) != 'none':
+                metric_counts['ground_truth_tuples'] += 1
 
-        pred_pos += len(pred_triplets)
-        for gt_triplet in ref_triplets:
-            if is_head_match(gt_triplet, pred_triplets, cur_mode):
-                correct += 1
+        pass
+    
+    print(metric_counts)
 
-    # print(pred_pos, '\t', gt_pos, '\t', correct, '\t', total_pred_triple, '\t', total_gt_triple, '\t', none_cnt)
-    p = float(correct / (pred_pos + 1e-08))
-    r = float(correct / (gt_pos + 1e-08))
-    f1 = 2 * p * r / (p + r + 1e-08)
-    p = round(p, 3)
-    r = round(r, 3)
+    precision = float(metric_counts['correct_predictions'] / (metric_counts['predicted_tuples']    + 1e-08))
+    recall    = float(metric_counts['correct_predictions'] / (metric_counts['ground_truth_tuples'] + 1e-08))
+    f1 = 2 * precision * recall / (precision + recall + 1e-08)
+    precision = round(precision, 3)
+    recall = round(recall, 3)
     f1 = round(f1, 3)
-    # res = [p, r, f1]
-    # print(res)
-    # print(r)
-    # print(f1)
-    # print(same_cnt)
-    # print(dup)
-    return p, r, f1
+
+    print("Partwise Results")
+    
+    event_acc = metric_counts['correct_events']/  (metric_counts['events_count'] + 1e-08)
+    evtype_acc = metric_counts['correct_event_type']/  (metric_counts['events_count'] + 1e-08)
+    argument_acc = metric_counts['correct_arguments']/  (metric_counts['predicted_tuples'] + 1e-08)
+    argtype_acc = metric_counts['correct_argment_types']/  (metric_counts['predicted_tuples'] + 1e-08)
+    role_acc = metric_counts['correct_argument_roles']/ (metric_counts['predicted_tuples'] + 1e-08)
+
+
+    print(f'Event Trigger Word Accuracy: {event_acc}')
+    print(f'Event Type Accuracy: {evtype_acc}')
+    print(f'Argument Identification Accuracy: {argument_acc}')
+    print(f'Argument Type Accuracy: {argtype_acc}')
+    print(f'Argument Role Accuracy: {role_acc}')
+
+    print(f'Macro f-score: {f1}')
+
+    f = open("Results_logger.txt", "a")
+
+    f.write(f'Event Trigger Word Accuracy: {event_acc}')
+    f.write("\n")
+    f.write(f'Event Type Accuracy: {evtype_acc}')
+    f.write("\n")
+    f.write(f'Argument Identification Accuracy: {argument_acc}')
+    f.write("\n")
+    f.write(f'Argument Type Accuracy: {argtype_acc}')
+    f.write("\n")
+    f.write(f'Argument Role Accuracy: {role_acc}')
+    f.write("\n")
+
+    f.write(f'Macro f-score: {f1}')
+    f.write("\n")
+
+    f.close()
+
+
+    return f1
+
+def cal_f1_for_pair(ref_tuple: str ,
+                    pred_tuple: str,
+                    event_lines: list
+                    ) -> list:
+    
+    ref_strings = ref_tuple.split(';')
+    pred_strings = pred_tuple.split(';')
+
+    ev1 = int( check_event_trigger(ref_strings[0].strip(), pred_strings[0].strip()) )
+    ev2 = int( check_event_type(ref_strings[1].strip(), pred_strings[1].strip(), event_lines) )
+
+    return ev1, ev2
+
+def cal_f1_for_tuple(ref_tuple: str ,
+                     pred_tuple: str,
+                     event_lines: list,
+                     argument_lines: list,
+                     roles_lines: list
+                     ) -> list:
+
+    ref_strings = ref_tuple.split(';')
+    pred_strings = pred_tuple.split(';')
+
+    if (len (pred_strings) != 5 ):
+        if (len (pred_strings) >= 2 ):
+            ev1 = int( check_event_trigger(ref_strings[0].strip(), pred_strings[0].strip()) )
+            ev2 = int( check_event_type(ref_strings[1].strip(), pred_strings[1].strip(), event_lines) )
+            return [ev1, ev2, 0, 0, 0]
+        return list([0,0,0,0,0])
+
+    ev1 = int( check_event_trigger(ref_strings[0].strip(), pred_strings[0].strip()) )
+    ev2 = int( check_event_type(ref_strings[1].strip(), pred_strings[1].strip(), event_lines) )
+    ev3 = int( check_event_argument(ref_strings[2].strip(), pred_strings[2].strip()) )
+    ev4 = int( check_argument_type(ref_strings[3].strip(), pred_strings[3].strip(), argument_lines) )
+    ev5 = int( check_argument_role(ref_strings[4].strip(), pred_strings[4].strip(), roles_lines) )
+
+    ret = [ev1, ev2, ev3, ev4, ev5]
+    
+    return ret
+
+
 
 def get_model(model_id):
     if model_id == 1:
@@ -495,22 +643,6 @@ def get_pred_words(preds, attns, src_words):
     return pred_words
 
 
-def get_F1(data, preds, attns):
-    gt_pos = 0
-    pred_pos = 0
-    correct_pos = 0
-    for i in range(0, len(data)):
-        gt_words = data[i].TrgWords[1:]
-        pred_words = get_pred_words(preds[i], attns[i], data[i].SrcWords)
-        gt_pos += len(gt_words)
-        pred_pos += len(pred_words)
-        for j in range(0, min(len(gt_words), len(pred_words))):
-            if gt_words[j] == pred_words[j]:
-                correct_pos += 1
-    return pred_pos, gt_pos, correct_pos
-
-
-# BERT?
 class WordEmbeddings(nn.Module):
     def __init__(self, vocab_size, embed_dim, pre_trained_embed_matrix, drop_out_rate):
         super(WordEmbeddings, self).__init__()
@@ -916,13 +1048,24 @@ def train_model(model_id, train_samples, dev_samples, best_model_file):
         custom_print('\nDev Results\n')
         set_random_seeds(random_seed)
         dev_preds, dev_attns = predict(dev_samples, model, model_id)
+        
+        write_test_res(dev_samples, dev_preds, dev_attns, os.path.join(trg_data_folder, 'dev.out'))
 
-        pred_pos, gt_pos, correct_pos = get_F1(dev_samples, dev_preds, dev_attns)
-        custom_print(pred_pos, '\t', gt_pos, '\t', correct_pos)
-        p = float(correct_pos) / (pred_pos + 1e-8)
-        r = float(correct_pos) / (gt_pos + 1e-8)
-        dev_acc = (2 * p * r) / (p + r + 1e-8)
-        custom_print('F1:', dev_acc)
+        ref_lines = open(trg_dev_file).read().splitlines()
+        pred_lines = open(os.path.join(trg_data_folder, 'dev.out')).read().splitlines()
+        event_lines = open(events_file).read().splitlines()
+        argument_lines = open(arguments_file).read().splitlines()
+        roles_lines = open(roles_file).read().splitlines()
+
+        dev_acc = calculate_f1(ref_lines, pred_lines, event_lines, argument_lines, roles_lines)
+
+
+        # pred_pos, gt_pos, correct_pos = get_F1(dev_samples, dev_preds, dev_attns)
+        # custom_print(pred_pos, '\t', gt_pos, '\t', correct_pos)
+        # p = float(correct_pos) / (pred_pos + 1e-8)
+        # r = float(correct_pos) / (gt_pos + 1e-8)
+        # dev_acc = (2 * p * r) / (p + r + 1e-8)
+        # custom_print('F1:', dev_acc)
 
         if dev_acc >= best_dev_acc:
             best_epoch_idx = epoch_idx + 1
@@ -941,23 +1084,35 @@ def train_model(model_id, train_samples, dev_samples, best_model_file):
 
 
 if __name__ == "__main__":
+    
     os.environ['CUDA_VISIBLE_DEVICES'] = sys.argv[1]
     random_seed = int(sys.argv[2])
+    src_data_folder = sys.argv[3]
+    trg_data_folder = sys.argv[4]
+    job_mode = sys.argv[5]
+    embedding_type = sys.argv[6]
+    granular_mode = 1
+
     n_gpu = torch.cuda.device_count()
     set_random_seeds(random_seed)
 
-    src_data_folder = sys.argv[3]
-    trg_data_folder = sys.argv[4]
+
     if not os.path.exists(trg_data_folder):
         os.mkdir(trg_data_folder)
     model_name = 1
-    job_mode = sys.argv[5]
-    # run = int(sys.argv[5])
+
+    #Tunable Hyperparameters
+
     batch_size = 32
     num_epoch = 30
     max_src_len = 100
     max_trg_len = 50
-    embedding_file = os.path.join(src_data_folder, 'w2v.txt')
+
+    if embedding_type == 'w2v':
+        embedding_file = os.path.join(src_data_folder, 'w2v.txt')
+    else:
+        embedding_file = os.path.join(src_data_folder, 'Bert_embeddings.txt')
+
     update_freq = 1
     enc_type = ['LSTM', 'GCN', 'LSTM-GCN'][0]
     att_type = ['None', 'Unigram', 'N-Gram-Enc'][1]
@@ -965,7 +1120,12 @@ if __name__ == "__main__":
     copy_on = True
 
     gcn_num_layers = 3
-    word_embed_dim = 300
+
+    if embedding_type == 'w2v':
+        word_embed_dim = 300
+    else:
+        word_embed_dim = 768
+    
     word_min_freq = 2
     char_embed_dim = 50
     char_feature_size = 50
@@ -1065,14 +1225,15 @@ if __name__ == "__main__":
         # roles_lines = open(roles_file).readlines()
 
         ref_lines = open(trg_test_file).read().splitlines()
-        pred_lines = open(os.path.join(trg_data_folder, 'test_without_copy.out')).read().splitlines()
+        pred_lines = open(os.path.join(trg_data_folder, 'test.out')).read().splitlines()
         event_lines = open(events_file).read().splitlines()
         argument_lines = open(arguments_file).read().splitlines()
         roles_lines = open(roles_file).read().splitlines()
 
         mode = 1
         custom_print('Overall F1')
-        custom_print(cal_f1(ref_lines, pred_lines, event_lines, argument_lines, roles_lines, mode))
+        # custom_print(cal_f1(ref_lines, pred_lines, event_lines, argument_lines, roles_lines, mode))
+        calculate_f1(ref_lines, pred_lines, event_lines, argument_lines, roles_lines)
 
         copy_on = False
         custom_print('Copy Off')
@@ -1094,8 +1255,8 @@ if __name__ == "__main__":
 
         mode = 1
         custom_print('Overall F1')
-        custom_print(cal_f1(ref_lines, pred_lines, event_lines, argument_lines, roles_lines, mode))
-
+        # custom_print(cal_f1(ref_lines, pred_lines, event_lines, argument_lines, roles_lines, mode))
+        calculate_f1(ref_lines, pred_lines, event_lines, argument_lines, roles_lines)
         logger.close()
 
 

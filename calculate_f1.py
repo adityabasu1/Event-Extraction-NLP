@@ -85,6 +85,9 @@ def calculate_f1(ref_lines, pred_lines, event_lines, argument_lines, roles_lines
 
         for pred_tuple in pred_tuples:
             pred_strings = pred_tuple.split(';')
+            if(len(pred_strings) < 3):
+              continue
+
 
             # in the case of no argument detection, we only calculate the event trigger scores
             if(pred_strings[2].strip().lower()) == 'none':
@@ -128,7 +131,7 @@ def calculate_f1(ref_lines, pred_lines, event_lines, argument_lines, roles_lines
             metric_counts['predicted_tuples'] += 1
             metric_counts['events_count'] += 1
 
-            if max_matches == 5:
+            if max_matches >= 4:
                 metric_counts['correct_predictions'] += 1
             if part_matches[0] == 1:
                 metric_counts['correct_events'] += 1
@@ -200,6 +203,13 @@ def cal_f1_for_tuple(ref_tuple: str ,
     ref_strings = ref_tuple.split(';')
     pred_strings = pred_tuple.split(';')
 
+    if (len (pred_strings) != 5 ):
+        if (len (pred_strings) >= 2 ):
+            ev1 = int( check_event_trigger(ref_strings[0].strip(), pred_strings[0].strip()) )
+            ev2 = int( check_event_type(ref_strings[1].strip(), pred_strings[1].strip(), event_lines) )
+            return [ev1, ev2, 0, 0, 0]
+        return list([0,0,0,0,0])
+
     ev1 = int( check_event_trigger(ref_strings[0].strip(), pred_strings[0].strip()) )
     ev2 = int( check_event_type(ref_strings[1].strip(), pred_strings[1].strip(), event_lines) )
     ev3 = int( check_event_argument(ref_strings[2].strip(), pred_strings[2].strip()) )
@@ -209,3 +219,4 @@ def cal_f1_for_tuple(ref_tuple: str ,
     ret = [ev1, ev2, ev3, ev4, ev5]
     
     return ret
+
