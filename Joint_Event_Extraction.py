@@ -374,7 +374,9 @@ def calculate_f1(ref_lines, pred_lines, event_lines, argument_lines, roles_lines
 
     print(f'Macro f-score: {f1}')
 
-    f = open("Results_logger.txt", "a")
+    targ_file = os.path.join(trg_data_folder, 'Results_logger.txt')
+
+    f = open(targ_file, "a")
 
     f.write(f'Event Trigger Word Accuracy: {event_acc}')
     f.write("\n")
