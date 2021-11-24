@@ -1141,7 +1141,7 @@ if __name__ == "__main__":
 
     drop_rate = 0.3
     layers = 1
-    early_stop_cnt = 5
+    early_stop_cnt = 20
     sample_cnt = 0
     Sample = recordclass("Sample", "Id SrcLen SrcWords TrgLen TrgWords")
 
