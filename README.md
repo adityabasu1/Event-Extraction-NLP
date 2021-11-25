@@ -36,7 +36,7 @@ To obtain the Word2Vec embeddings and BERT embeddings, download ```'w2v.txt'``` 
 - ```train/test```: Job mode (Choose ```only one``` of the two modes at once)
 - ```w2v/bert```: Embedding type
 
-**Default Command Line Arguments for Google Collaboratory**
+**Default Command Line Arguments for Google Colaboratory**
 - os.environ[‘CUDA_VISIBLE_DEVICES’] (= ```gpu_id```) = ‘0’
 - ```random_seed``` = 42
 
