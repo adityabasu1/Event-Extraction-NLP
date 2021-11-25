@@ -18,7 +18,7 @@ An encoder-decoder based architecture for joint entity-relation extraction was p
 ![img1](https://lh3.googleusercontent.com/keep-bbsk/AGk0z-P0wlU-ehsSX8YPLAL4XYqVgKV5M_Xw96H5TpvsGWm6vdUqRGcuOHxZuz8p-oIqbHRIkdlVwbVg0-1dSGGXSDZG9SK9FSutYHfXGZI=s512)
 
 ## Datasets <br />
-The data is publicly available at: https://drive.google.com/drive/u/1/folders/1fYP9PUQYRV0JWBa-N3CwuGkOCeBielT9 <br />
+The data is available at: https://drive.google.com/drive/u/1/folders/1fYP9PUQYRV0JWBa-N3CwuGkOCeBielT9 <br />
 To obtain the Word2Vec embeddings and BERT embeddings, download ```'w2v.txt'``` and ```'BERT_embeddings.txt'``` from the aforementioned link. <br />
 
 ## Requirements <br />
