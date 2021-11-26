@@ -34,10 +34,10 @@ To obtain the Word2Vec embeddings and BERT embeddings, download ```'w2v.txt'``` 
   ```src_data_folder = path```
   ```trg_data_folder = path + 'Model'```
   
-    - for switching between training and testing phases, set the following parameters under ```if __name__ == "__main__":```
+    - for switching between training and testing phases, set the following parameters under ```if __name__ == "__main__":```,
   ```job_mode = 'train'``` or ```job_mode = 'test'```
 
-    - for switching between Word2Vec and BERT embeddings, set the following parameters under ```if __name__ == "__main__":```
+    - for switching between Word2Vec and BERT embeddings, set the following parameters under ```if __name__ == "__main__":```,
   ```embedding_type = 'w2v'``` or ```embedding_type = 'bert'```
 
 **Command Line Arguments**
