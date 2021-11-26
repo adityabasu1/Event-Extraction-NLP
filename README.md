@@ -28,7 +28,17 @@ To obtain the Word2Vec embeddings and BERT embeddings, download ```'w2v.txt'``` 
 
 ## Running the Code <br />
 - **Python3:** ```python3  Joint_Event_Extraction.py  gpu_id  random_seed  source_data_dir  target_data_dir  train/test  w2v/bert```
+
 - **IPython:** Run individual cells of ```NLP_Proj6_Grp_19.ipynb```
+    - set the data folder and the output saving folder:
+  ```src_data_folder = path```
+  ```trg_data_folder = path + 'Model'```
+  
+    - for switching between training and testing phases, set the following parameters under ```if __name__ == "__main__":```
+  ```job_mode = 'train'``` or ```job_mode = 'test'```
+
+    - for switching between Word2Vec and BERT embeddings, set the following parameters under ```if __name__ == "__main__":```
+  ```embedding_type = 'w2v'``` or ```embedding_type = 'bert'```
 
 **Command Line Arguments**
 - ```Source_data_dir```: Path to source data directory
@@ -39,5 +49,4 @@ To obtain the Word2Vec embeddings and BERT embeddings, download ```'w2v.txt'``` 
 **Default Command Line Arguments for Google Colaboratory**
 - os.environ[‘CUDA_VISIBLE_DEVICES’] (= ```gpu_id```) = ‘0’
 - ```random_seed``` = 42
-
 
